@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"time"
 )
@@ -29,9 +30,14 @@ func Digest(data []byte) string {
 	return Encode64(Hash256(data))
 }
 
-// Encode encodes some bytes into a base64 string.
+// Encode64 encodes some bytes into a base64 string.
 func Encode64(data []byte) string {
 	return base64.StdEncoding.EncodeToString(data)
+}
+
+// Decode64 decodes a base64 string into bytes
+func Decode64(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
 }
 
 // Hash256 returns the SHA256 hash of some bytes.
@@ -62,6 +68,15 @@ func NonceBytes() ([]byte, error) {
 func NonceString() (string, error) {
 	nonce, err := NonceBytes()
 	return Encode64(nonce), err
+}
+
+// NonceUint64 generates a nonce and returns it as an uint64.
+func NonceUint64() (uint64, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0, err
+	}
+	return uint64(binary.LittleEndian.Uint64(b[:])), nil
 }
 
 // Timestamp formats a time.Time into timestamp string format.

@@ -4,8 +4,10 @@ import (
 	"auth-playground/authv1"
 	"auth-playground/authv2"
 	"auth-playground/authv3"
+	"auth-playground/authv4"
 	"auth-playground/crypto"
 	"bytes"
+	"context"
 	"fmt"
 	"html"
 	"io"
@@ -115,6 +117,30 @@ func authMiddlewareV3(keyGetter crypto.KeyGetter, next http.Handler) http.Handle
 	})
 }
 
+// Example middleware for the authv4 scheme.
+//
+// This tries to be a simpler JSON.
+type authDataKeyType int
+
+const authDataKey = authDataKeyType(0)
+
+func authMiddlewareV4(keyGetter crypto.KeyGetter, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("AuthV4")
+		authData, valid, err := authv4.Validate(token, keyGetter)
+		if err != nil {
+			http.Error(w, "token v4 not valid", http.StatusBadRequest)
+			return
+		}
+		if !valid {
+			http.Error(w, "token v4 not valid", http.StatusBadRequest)
+			return
+		}
+		fmt.Println("authv4 ok")
+		r = r.WithContext(context.WithValue(r.Context(), authDataKey, authData))
+		next.ServeHTTP(w, r)
+	})
+}
 func main() {
 	// Some data for us to use in our request
 	var (
@@ -125,6 +151,7 @@ func main() {
 		data     = []byte("{'burger':'fries'}")
 		entropy  = []string{"broccoli", action, resource, crypto.Digest(data)}
 		key      = []byte("user-key")
+		role     = "chef"
 	)
 	// Simulates a query to the DB
 	keyGetter := func(s string) ([]byte, error) {
@@ -138,16 +165,18 @@ func main() {
 	tokenV1 := authv1.Tokenize(id, datetime, action, resource, data, key)
 	tokenV2 := authv2.Tokenize(id, datetime, entropy, key)
 	tokenV3, _ := authv3.Tokenize(id, datetime, data, key)
+	tokenV4, _ := authv4.Tokenize(id, role, key)
 
 	req := httptest.NewRequest("POST", "http://zuchini"+resource, bytes.NewBuffer(data))
 	req.Header.Set("AuthV1", tokenV1)
 	req.Header.Set("AuthV2", tokenV2)
 	req.Header.Set("AuthV3", tokenV3)
+	req.Header.Set("AuthV4", tokenV4)
 
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("handler")
 		w.Write([]byte("OK"))
 	})
-	handlerToTest := authMiddlewareV1(keyGetter, authMiddlewareV2(keyGetter, authMiddlewareV3(keyGetter, nextHandler)))
+	handlerToTest := authMiddlewareV1(keyGetter, authMiddlewareV2(keyGetter, authMiddlewareV3(keyGetter, authMiddlewareV4(keyGetter, nextHandler))))
 	handlerToTest.ServeHTTP(httptest.NewRecorder(), req)
 }

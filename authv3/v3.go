@@ -47,6 +47,9 @@ func Tokenize(id string, datetime time.Time, data []byte, key []byte) (string, e
 
 func Validate(token string, getKey crypto.KeyGetter, data []byte) (bool, error) {
 	parts := strings.Split(token, ":")
+	if len(parts) != 5 {
+		return false, ErrInvalid
+	}
 
 	tId := parts[0]
 	tTimestamp := parts[1]
